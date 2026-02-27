@@ -45,7 +45,7 @@ main { max-width:900px; margin:30px auto; padding:0 20px; display:flex; flex-dir
   <div id="login">
     <p>Oyuna başlamak için giriş yapın:</p>
     <button id="google-login" style="background:#4285F4;color:white;">Google ile Giriş</button>
-    <button id="apple-login" style="background:black;color:white;">Apple ile Giriş</button>
+    <!-- Apple login devre dışı -->
   </div>
 
   <div id="game-card">
@@ -66,12 +66,12 @@ main { max-width:900px; margin:30px auto; padding:0 20px; display:flex; flex-dir
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
 
 <script>
-// Firebase config buraya
+// Firebase config
 const firebaseConfig = {
   apiKey: "AIzaSyDrkrO1LZwqdhC8zDZcjLSmn3PY5mhACKY",
   authDomain: "bilgisite-fc4b7.firebaseapp.com",
   projectId: "bilgisite-fc4b7",
-  storageBucket: "bilgisite-fc4b7.firebasestorage.app",
+  storageBucket: "bilgisite-fc4b7.appspot.com",
   messagingSenderId: "105764104633",
   appId: "1:105764104633:web:e8d2b4db35ec58d7336e68",
   measurementId: "G-17C89ELE77"
@@ -108,7 +108,6 @@ function displayInfos(){
     card.className = 'info-card';
     card.innerHTML = `<h3>${info.title}</h3><p>${info.detail}</p>`;
 
-    // +18 içerik kontrolü
     if(info.adult){
       if(!currentUser || (currentUser.birthYear && currentUser.birthYear+18 > new Date().getFullYear())){
         card.classList.add('adult-blur');
@@ -167,23 +166,25 @@ async function updateLeaderboard(){
 
 // Login sonrası
 function handleLogin(user){
-  currentUser = user;
+  if(!user) return;
+  currentUser = { 
+    name: user.displayName, 
+    email: user.email,
+    uid: user.uid
+  };
   loginDiv.style.display='none';
   gameCard.style.display='flex';
-  displayInfos(); // +18 içerik güncellenmiş haliyle
+  displayInfos();
   createQuestion();
 }
 
 // Google login
-document.getElementById('google-login').onclick = () => {
+document.getElementById('google-login').onclick = (e) => {
+  e.preventDefault();
   const provider = new firebase.auth.GoogleAuthProvider();
-  auth.signInWithPopup(provider).then(result => handleLogin(result.user));
-};
-
-// Apple login
-document.getElementById('apple-login').onclick = () => {
-  const provider = new firebase.auth.OAuthProvider('apple.com');
-  auth.signInWithPopup(provider).then(result => handleLogin(result.user));
+  auth.signInWithPopup(provider)
+      .then(result => handleLogin(result.user))
+      .catch(err => console.error(err));
 };
 
 // Siteyi login olmadan aç
