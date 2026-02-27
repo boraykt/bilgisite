@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Günlük İlginç Bilgi + Mini-Game</title>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap" rel="stylesheet">
+<style>
+body { font-family:'Poppins',sans-serif; margin:0; padding:0; background:linear-gradient(135deg,#fdfbfb,#ebedee); color:#333; }
+header { background:linear-gradient(90deg,#4facfe,#00f2fe); color:white; text-align:center; padding:40px 20px; box-shadow:0 5px 15px rgba(0,0,0,0.1); }
+header h1 { font-weight:600; font-size:2rem; margin:0; letter-spacing:1px; }
+main { max-width:900px; margin:30px auto; padding:0 20px; display:flex; flex-direction:column; gap:30px; }
+.info-card { background:white; border-radius:15px; padding:20px; box-shadow:0 8px 25px rgba(0,0,0,0.08); transition:transform 0.3s, box-shadow 0.3s; opacity:0; transform:translateY(20px); position:relative; }
+.info-card.show { opacity:1; transform:translateY(0); }
+.info-card:hover { transform:translateY(-5px); box-shadow:0 12px 30px rgba(0,0,0,0.15); }
+.info-card h3 { margin:0 0 12px 0; font-size:1.3rem; color:#222; }
+.info-card p { margin:0; color:#555; line-height:1.5; }
+.info-card.adult-blur::after { content:"18+ İçerik"; position:absolute; top:0; left:0; right:0; bottom:0; background:rgba(255,255,255,0.7); color:#000; display:flex; justify-content:center; align-items:center; font-weight:600; font-size:1.2rem; border-radius:15px; cursor:pointer; }
+.share { margin-top:10px; }
+.share button { margin-right:8px; padding:6px 14px; border:none; border-radius:8px; cursor:pointer; font-weight:600; transition:transform 0.2s; }
+.share button:hover { transform:scale(1.1); }
+.x { background:#000; color:white; }
+.whatsapp { background:#25D366; color:white; }
+.instagram { background:#E1306C; color:white; }
+
+#login { text-align:center; margin:20px 0; }
+#login button { margin:0 10px; padding:10px 20px; border:none; border-radius:10px; font-weight:600; cursor:pointer; }
+#game-card { background:white; border-radius:20px; padding:25px; box-shadow:0 10px 35px rgba(0,0,0,0.12); display:none; flex-direction:column; align-items:center; }
+#game h2 { font-size:1.5rem; margin-bottom:15px; }
+#answers button { margin:5px; padding:10px 15px; border:none; border-radius:8px; cursor:pointer; }
+#score { font-weight:600; margin-top:10px; }
+#leaderboard { margin-top:15px; width:100%; text-align:left; }
+#leaderboard h3 { margin-bottom:10px; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Günlük İlginç Bilgi</h1>
+</header>
+
+<main id="main-content">
+  <div id="info-container"></div>
+
+  <div id="login">
+    <p>Oyuna başlamak için giriş yapın:</p>
+    <button id="google-login" style="background:#4285F4;color:white;">Google ile Giriş</button>
+    <button id="apple-login" style="background:black;color:white;">Apple ile Giriş</button>
+  </div>
+
+  <div id="game-card">
+    <h2>Bilgi Tahmin Oyunu</h2>
+    <p id="question"></p>
+    <div id="answers"></div>
+    <p id="score">Puan: 0</p>
+    <div id="leaderboard">
+      <h3>Leaderboard</h3>
+      <ol id="lb-list"></ol>
+    </div>
+  </div>
+</main>
+
+<!-- Firebase SDK -->
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+
+<script>
+// Firebase config buraya
+const firebaseConfig = {
+  apiKey: "API_KEY_HERE",
+  authDomain: "PROJECT_ID.firebaseapp.com",
+  projectId: "PROJECT_ID",
+  storageBucket: "PROJECT_ID.appspot.com",
+  messagingSenderId: "SENDER_ID",
+  appId: "APP_ID"
+};
+firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
+const db = firebase.firestore();
+
+const container=document.getElementById('info-container');
+const gameCard=document.getElementById('game-card');
+const loginDiv=document.getElementById('login');
+const questionEl=document.getElementById('question');
+const answersEl=document.getElementById('answers');
+const scoreEl=document.getElementById('score');
+const lbList=document.getElementById('lb-list');
+
+let currentUser = null;
+let score = 0, currentQ = 0;
+let dailyInfos = [];
+
+// Günlük bilgiler Firestore'dan çek
+async function loadDailyInfos(){
+  const todayStr = new Date().toISOString().split('T')[0];
+  const snapshot = await db.collection('dailyInfos').where('date','==',todayStr).get();
+  dailyInfos = snapshot.docs.map(doc=>doc.data());
+  displayInfos();
+}
+
+// Kartları göster
+function displayInfos(){
+  container.innerHTML='';
+  dailyInfos.forEach((info)=>{
+    const card = document.createElement('div');
+    card.className = 'info-card';
+    card.innerHTML = `<h3>${info.title}</h3><p>${info.detail}</p>`;
+
+    // +18 içerik kontrolü
+    if(info.adult){
+      if(!currentUser || (currentUser.birthYear && currentUser.birthYear+18 > new Date().getFullYear())){
+        card.classList.add('adult-blur');
+        card.onclick = () => alert("18 yaşından küçükler göremez.");
+      }
+    }
+
+    // Share buttons
+    const shareDiv = document.createElement('div'); shareDiv.className='share';
+    const xBtn = document.createElement('button'); xBtn.className='x'; xBtn.textContent='X';
+    xBtn.onclick = ()=>window.open(`https://x.com/intent/tweet?text=${encodeURIComponent(info.title+" - "+info.detail)}`,'_blank');
+    const waBtn = document.createElement('button'); waBtn.className='whatsapp'; waBtn.textContent='WhatsApp';
+    waBtn.onclick = ()=>window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(info.title+" - "+info.detail)}`,'_blank');
+    const igBtn = document.createElement('button'); igBtn.className='instagram'; igBtn.textContent='Instagram';
+    igBtn.onclick = ()=>alert("Instagram paylaşımı için ekran görüntüsü veya link kullanabilirsiniz.");
+    shareDiv.appendChild(xBtn); shareDiv.appendChild(waBtn); shareDiv.appendChild(igBtn);
+    card.appendChild(shareDiv);
+
+    container.appendChild(card);
+    setTimeout(()=>card.classList.add('show'),150);
+  });
+}
+
+// Mini-game
+function createQuestion(){
+  if(currentQ>=dailyInfos.length){updateLeaderboard(); return;}
+  const q=dailyInfos[currentQ];
+  questionEl.textContent=`"${q.title}" başlığı hangi detayla eşleşiyor?`;
+  const options=[q.detail];
+  while(options.length<3){
+    let rand=dailyInfos[Math.floor(Math.random()*dailyInfos.length)].detail;
+    if(!options.includes(rand)) options.push(rand);
+  }
+  options.sort(()=>Math.random()-0.5);
+  answersEl.innerHTML='';
+  options.forEach(opt=>{
+    const btn=document.createElement('button'); btn.textContent=opt;
+    btn.onclick=()=>{
+      if(opt===q.detail){score+=10; scoreEl.textContent='Puan: '+score;}
+      currentQ++; createQuestion();
+    };
+    answersEl.appendChild(btn);
+  });
+}
+
+async function updateLeaderboard(){
+  const lbSnapshot = await db.collection('users').orderBy('score','desc').limit(10).get();
+  lbList.innerHTML='';
+  lbSnapshot.docs.forEach(doc=>{
+    const data = doc.data();
+    const li = document.createElement('li');
+    li.textContent=`${data.name}: ${data.score}`;
+    lbList.appendChild(li);
+  });
+}
+
+// Login sonrası
+function handleLogin(user){
+  currentUser = user;
+  loginDiv.style.display='none';
+  gameCard.style.display='flex';
+  displayInfos(); // +18 içerik güncellenmiş haliyle
+  createQuestion();
+}
+
+// Google login
+document.getElementById('google-login').onclick = () => {
+  const provider = new firebase.auth.GoogleAuthProvider();
+  auth.signInWithPopup(provider).then(result => handleLogin(result.user));
+};
+
+// Apple login
+document.getElementById('apple-login').onclick = () => {
+  const provider = new firebase.auth.OAuthProvider('apple.com');
+  auth.signInWithPopup(provider).then(result => handleLogin(result.user));
+};
+
+// Siteyi login olmadan aç
+loadDailyInfos();
+</script>
+
+</body>
+</html>
