@@ -45,7 +45,6 @@ main { max-width:900px; margin:30px auto; padding:0 20px; display:flex; flex-dir
   <div id="login">
     <p>Oyuna başlamak için giriş yapın:</p>
     <button id="google-login" style="background:#4285F4;color:white;">Google ile Giriş</button>
-    <!-- Apple login devre dışı -->
   </div>
 
   <div id="game-card">
@@ -60,13 +59,14 @@ main { max-width:900px; margin:30px auto; padding:0 20px; display:flex; flex-dir
   </div>
 </main>
 
-<!-- Firebase SDK -->
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+<script type="module">
+// 🔹 Firebase v9+ modüler SDK
+import { initializeApp } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js";
+import { getAnalytics } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-analytics.js";
+import { getAuth, GoogleAuthProvider, signInWithPopup } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-auth.js";
+import { getFirestore, collection, query, where, getDocs, orderBy, limit } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js";
 
-<script>
-// Firebase config
+// 🔹 Firebase config (senin verdiğin)
 const firebaseConfig = {
   apiKey: "AIzaSyDrkrO1LZwqdhC8zDZcjLSmn3PY5mhACKY",
   authDomain: "bilgisite-fc4b7.firebaseapp.com",
@@ -76,10 +76,14 @@ const firebaseConfig = {
   appId: "1:105764104633:web:e8d2b4db35ec58d7336e68",
   measurementId: "G-17C89ELE77"
 };
-firebase.initializeApp(firebaseConfig);
-const auth = firebase.auth();
-const db = firebase.firestore();
 
+// 🔹 Initialize Firebase
+const app = initializeApp(firebaseConfig);
+const analytics = getAnalytics(app);
+const auth = getAuth(app);
+const db = getFirestore(app);
+
+// 🔹 DOM Elements
 const container=document.getElementById('info-container');
 const gameCard=document.getElementById('game-card');
 const loginDiv=document.getElementById('login');
@@ -92,30 +96,30 @@ let currentUser = null;
 let score = 0, currentQ = 0;
 let dailyInfos = [];
 
-// Günlük bilgiler Firestore'dan çek
+// 🔹 Günlük bilgiler Firestore'dan çek
 async function loadDailyInfos(){
   const todayStr = new Date().toISOString().split('T')[0];
-  const snapshot = await db.collection('dailyInfos').where('date','==',todayStr).get();
+  const qSnapshot = query(collection(db,'dailyInfos'), where('date','==',todayStr));
+  const snapshot = await getDocs(qSnapshot);
   dailyInfos = snapshot.docs.map(doc=>doc.data());
   displayInfos();
 }
 
-// Kartları göster
+// 🔹 Kartları göster
 function displayInfos(){
   container.innerHTML='';
-  dailyInfos.forEach((info)=>{
+  dailyInfos.forEach(info=>{
     const card = document.createElement('div');
-    card.className = 'info-card';
-    card.innerHTML = `<h3>${info.title}</h3><p>${info.detail}</p>`;
+    card.className='info-card';
+    card.innerHTML=`<h3>${info.title}</h3><p>${info.detail}</p>`;
 
     if(info.adult){
       if(!currentUser || (currentUser.birthYear && currentUser.birthYear+18 > new Date().getFullYear())){
         card.classList.add('adult-blur');
-        card.onclick = () => alert("18 yaşından küçükler göremez.");
+        card.onclick=()=>alert("18 yaşından küçükler göremez.");
       }
     }
 
-    // Share buttons
     const shareDiv = document.createElement('div'); shareDiv.className='share';
     const xBtn = document.createElement('button'); xBtn.className='x'; xBtn.textContent='X';
     xBtn.onclick = ()=>window.open(`https://x.com/intent/tweet?text=${encodeURIComponent(info.title+" - "+info.detail)}`,'_blank');
@@ -131,14 +135,14 @@ function displayInfos(){
   });
 }
 
-// Mini-game
+// 🔹 Mini-game
 function createQuestion(){
   if(currentQ>=dailyInfos.length){updateLeaderboard(); return;}
-  const q=dailyInfos[currentQ];
+  const q = dailyInfos[currentQ];
   questionEl.textContent=`"${q.title}" başlığı hangi detayla eşleşiyor?`;
   const options=[q.detail];
   while(options.length<3){
-    let rand=dailyInfos[Math.floor(Math.random()*dailyInfos.length)].detail;
+    const rand=dailyInfos[Math.floor(Math.random()*dailyInfos.length)].detail;
     if(!options.includes(rand)) options.push(rand);
   }
   options.sort(()=>Math.random()-0.5);
@@ -153,43 +157,41 @@ function createQuestion(){
   });
 }
 
+// 🔹 Leaderboard
 async function updateLeaderboard(){
-  const lbSnapshot = await db.collection('users').orderBy('score','desc').limit(10).get();
+  const lbQ = query(collection(db,'users'), orderBy('score','desc'), limit(10));
+  const lbSnapshot = await getDocs(lbQ);
   lbList.innerHTML='';
   lbSnapshot.docs.forEach(doc=>{
-    const data = doc.data();
-    const li = document.createElement('li');
+    const data=doc.data();
+    const li=document.createElement('li');
     li.textContent=`${data.name}: ${data.score}`;
     lbList.appendChild(li);
   });
 }
 
-// Login sonrası
+// 🔹 Login sonrası
 function handleLogin(user){
   if(!user) return;
-  currentUser = { 
-    name: user.displayName, 
-    email: user.email,
-    uid: user.uid
-  };
+  currentUser={name:user.displayName,email:user.email,uid:user.uid};
   loginDiv.style.display='none';
   gameCard.style.display='flex';
   displayInfos();
   createQuestion();
 }
 
-// Google login
-document.getElementById('google-login').onclick = (e) => {
+// 🔹 Google Login
+document.getElementById('google-login').onclick=(e)=>{
   e.preventDefault();
-  const provider = new firebase.auth.GoogleAuthProvider();
-  auth.signInWithPopup(provider)
-      .then(result => handleLogin(result.user))
-      .catch(err => console.error(err));
+  const provider=new GoogleAuthProvider();
+  signInWithPopup(auth,provider)
+    .then(result=>handleLogin(result.user))
+    .catch(err=>console.error(err));
 };
 
-// Siteyi login olmadan aç
+// 🔹 Siteyi login olmadan aç
 loadDailyInfos();
-</script>
 
+</script>
 </body>
 </html>
